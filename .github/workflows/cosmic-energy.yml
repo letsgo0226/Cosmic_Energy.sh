@@ -1,0 +1,65 @@
+name: Cosmic Energy
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  repository_dispatch:
+    types: [cosmic-energy]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cosmic-energy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify one-line kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          bytes=$(wc -c < Cosmic_Energy.sh)
+          lines=$(wc -l < Cosmic_Energy.sh)
+          echo "Kernel bytes: $bytes"
+          echo "Kernel physical lines: $lines"
+          test "$bytes" -lt 2048
+          test "$lines" -eq 1
+
+      - name: Run Cosmic Energy
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh Cosmic_Energy.sh 8 | tee cosmic_energy.jsonl
+          python3 - <<'PY'
+          import json
+          rows=[json.loads(x) for x in open('cosmic_energy.jsonl',encoding='utf-8') if x.strip()]
+          assert rows and rows[0].get('MODEL')=='OFFLINE_OMEGA_KERNEL'
+          steps=rows[1:]
+          assert len(steps)==8
+          assert all(x.get('SPEC_OK') is True for x in steps)
+          print('PASS: all 8 invariant steps closed')
+          PY
+          {
+            echo '## Cosmic Energy'
+            echo
+            echo '- Trigger: `${{ github.event_name }}`'
+            echo '- Kernel: `Cosmic_Energy.sh`'
+            echo '- Iterations: `8`'
+            echo '- Result: `PASS`'
+            echo
+            echo '```json'
+            tail -n 1 cosmic_energy.jsonl
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
