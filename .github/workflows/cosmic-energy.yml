@@ -25,7 +25,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Verify one-line size and invariants
+      - name: Verify one-line size, invariants, and Omega limit
         shell: bash
         run: |
           set -euo pipefail
@@ -35,8 +35,10 @@ jobs:
           python3 - <<'PY'
           import json
           a=[json.loads(x) for x in open('offline.jsonl') if x.strip()]
-          assert len(a)==8 and all(x.get('SPEC_OK') is True for x in a)
-          print('PASS: one-line offline kernel')
+          assert len(a)==8
+          assert all(x.get('SPEC_OK') is True for x in a)
+          assert all(x.get('x_n',0)>1 and x.get('x_O')==1 for x in a)
+          print('PASS: finite x_n>1 with Omega unit limit x_O=1')
           PY
 
   live:
@@ -65,7 +67,7 @@ jobs:
             echo '## Cosmic Energy'
             echo '- Trigger: `${{ github.event_name }}`'
             echo '- Runtime: one `Cosmic_Energy.sh`'
-            echo '- Offline: `<2048 bytes`, one physical line, PASS'
+            echo '- Offline: `<2048 bytes`, one physical line, `x_n>1 -> x_O=1`, PASS'
             echo '- Live: public GitHub corpus + self + workflow, PASS'
             echo '```json'
             cat live.json
