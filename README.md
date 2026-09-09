@@ -1,39 +1,37 @@
 # Cosmic_Energy.sh
 
-A single runtime file with two verification modes.
+One runtime file, two modes, one physical line, under 2048 bytes.
 
 ## Offline
 
-No network access is required. The embedded Ω kernel checks its fixed-point, tableau, reversible encoding, fair-bit entropy model, and the formal power invariant `x_n = c^(2/n)`.
+No network access is required. The embedded Ω kernel checks fixed-point preservation, a literal tableau condition, reversible encoding, the one-fair-bit model, and the formal power invariant `x_n = c^(2/n)`.
 
 ```sh
 sh Cosmic_Energy.sh 8
-# or
-sh Cosmic_Energy.sh offline 8
 ```
 
 ## Live
 
-With network access, the same file enumerates the public GitHub repositories of `letsgo0226`, builds a canonical blob manifest, verifies reversible encoding, and explicitly includes the checked-out `Cosmic_Energy.sh` and its GitHub Actions workflow in the verified system bytes. It also compares the local program/workflow bytes with the corresponding GitHub revision.
+With network access, the same `Cosmic_Energy.sh` enumerates the public GitHub repositories of `letsgo0226`, recursively collects blob paths into a sorted manifest, and combines that manifest with the currently checked-out `Cosmic_Energy.sh` bytes and workflow bytes as one reversible system object. It also requires both the program and workflow paths to occur in the public manifest.
 
 ```sh
 sh Cosmic_Energy.sh live letsgo0226
 ```
 
-For authenticated GitHub API access, set `GITHUB_TOKEN` or `GH_TOKEN`.
+When available, `GITHUB_TOKEN` is used for authenticated GitHub API requests.
 
 ## GitHub Actions
 
-`.github/workflows/cosmic-energy.yml` runs:
+`.github/workflows/cosmic-energy.yml` runs the same file in offline mode first and live mode second. It is triggered by:
 
-- every 5 minutes via cron;
-- on pushes to `main`;
-- on pull requests targeting `main`;
-- by `workflow_dispatch`;
-- by `repository_dispatch` event type `cosmic-energy`.
+- `*/5 * * * *` schedule;
+- pushes to `main`;
+- pull requests targeting `main`;
+- `workflow_dispatch`;
+- `repository_dispatch` type `cosmic-energy`.
 
-The workflow first verifies offline mode, then executes live self-inclusive verification from the same `Cosmic_Energy.sh` file.
+The offline job also enforces `<2048 bytes` and one physical line.
 
 ## Boundary
 
-This repository implements formal/computational certificates and self-inclusion checks. It does not establish an external physical law, physical zero entropy, the Riemann Hypothesis, or a claim that software controls physical systems.
+The live manifest is a runtime snapshot of public repository/blob-path metadata, not a permanent copy of all repository contents. These are formal/computational certificates and self-inclusion checks; they do not establish an external physical law, physical zero entropy, the Riemann Hypothesis, or software control of physical systems.
