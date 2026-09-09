@@ -19,14 +19,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
+  offline:
+    name: Offline invariant kernel
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Verify one-line kernel
+      - uses: actions/checkout@v4
+      - name: Verify one-line offline kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -36,30 +35,53 @@ jobs:
           echo "Kernel physical lines: $lines"
           test "$bytes" -lt 2048
           test "$lines" -eq 1
-
-      - name: Run Cosmic Energy
+      - name: Run offline kernel
         shell: bash
         run: |
           set -euo pipefail
-          sh Cosmic_Energy.sh 8 | tee cosmic_energy.jsonl
+          sh Cosmic_Energy.sh 8 | tee cosmic_energy_offline.jsonl
           python3 - <<'PY'
           import json
-          rows=[json.loads(x) for x in open('cosmic_energy.jsonl',encoding='utf-8') if x.strip()]
+          rows=[json.loads(x) for x in open('cosmic_energy_offline.jsonl',encoding='utf-8') if x.strip()]
           assert rows and rows[0].get('MODEL')=='OFFLINE_OMEGA_KERNEL'
-          steps=rows[1:]
-          assert len(steps)==8
-          assert all(x.get('SPEC_OK') is True for x in steps)
-          print('PASS: all 8 invariant steps closed')
+          assert len(rows[1:])==8
+          assert all(x.get('SPEC_OK') is True for x in rows[1:])
+          print('PASS: offline invariants closed')
+          PY
+
+  live:
+    name: Live GitHub corpus verifier
+    needs: offline
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify live public corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh Cosmic_Energy_Live.sh letsgo0226 | tee cosmic_energy_live.json
+          python3 - <<'PY'
+          import json
+          x=json.load(open('cosmic_energy_live.json',encoding='utf-8'))
+          assert x.get('MODEL')=='COSMIC_ENERGY_LIVE_GITHUB'
+          assert x.get('CORPUS_OK') is True
+          assert x.get('REV') is True
+          assert x.get('TRUNCATED') is False
+          assert not x.get('ERRORS')
+          print('PASS: live GitHub corpus manifest verified')
           PY
           {
             echo '## Cosmic Energy'
             echo
             echo '- Trigger: `${{ github.event_name }}`'
-            echo '- Kernel: `Cosmic_Energy.sh`'
-            echo '- Iterations: `8`'
-            echo '- Result: `PASS`'
+            echo '- Offline kernel: `PASS`'
+            echo '- Live corpus: `PASS`'
+            echo '- Owner: `letsgo0226`'
             echo
             echo '```json'
-            tail -n 1 cosmic_energy.jsonl
+            cat cosmic_energy_live.json
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
