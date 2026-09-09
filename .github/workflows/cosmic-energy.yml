@@ -25,21 +25,11 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Verify one-line offline kernel
+      - name: Run offline mode
         shell: bash
         run: |
           set -euo pipefail
-          bytes=$(wc -c < Cosmic_Energy.sh)
-          lines=$(wc -l < Cosmic_Energy.sh)
-          echo "Kernel bytes: $bytes"
-          echo "Kernel physical lines: $lines"
-          test "$bytes" -lt 2048
-          test "$lines" -eq 1
-      - name: Run offline kernel
-        shell: bash
-        run: |
-          set -euo pipefail
-          sh Cosmic_Energy.sh 8 | tee cosmic_energy_offline.jsonl
+          sh Cosmic_Energy.sh offline 8 | tee cosmic_energy_offline.jsonl
           python3 - <<'PY'
           import json
           rows=[json.loads(x) for x in open('cosmic_energy_offline.jsonl',encoding='utf-8') if x.strip()]
@@ -50,7 +40,7 @@ jobs:
           PY
 
   live:
-    name: Live GitHub corpus verifier
+    name: Live self-inclusive GitHub verifier
     needs: offline
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -58,28 +48,38 @@ jobs:
       GITHUB_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
-      - name: Verify live public corpus
+      - name: Run live mode from the same program
         shell: bash
         run: |
           set -euo pipefail
-          sh Cosmic_Energy_Live.sh letsgo0226 | tee cosmic_energy_live.json
+          sh Cosmic_Energy.sh live letsgo0226 | tee cosmic_energy_live.json
           python3 - <<'PY'
           import json
           x=json.load(open('cosmic_energy_live.json',encoding='utf-8'))
-          assert x.get('MODEL')=='COSMIC_ENERGY_LIVE_GITHUB'
+          assert x.get('MODEL')=='COSMIC_ENERGY_LIVE_SELF_REFERENTIAL'
           assert x.get('CORPUS_OK') is True
-          assert x.get('REV') is True
+          assert x.get('MANIFEST_REV') is True
+          assert x.get('SELF_REV') is True
+          assert x.get('WORKFLOW_REV') is True
+          assert x.get('SYSTEM_REV') is True
+          assert x.get('SELF_IN_PUBLIC_MANIFEST') is True
+          assert x.get('WORKFLOW_IN_PUBLIC_MANIFEST') is True
+          assert x.get('SELF_REMOTE_MATCH') is True
+          assert x.get('WORKFLOW_REMOTE_MATCH') is True
+          assert x.get('PROGRAM_IN_SYSTEM_BYTES') is True
           assert x.get('TRUNCATED') is False
           assert not x.get('ERRORS')
-          print('PASS: live GitHub corpus manifest verified')
+          assert x.get('REMOTE_ERROR') is None
+          print('PASS: unified live self-inclusive certificate closed')
           PY
           {
             echo '## Cosmic Energy'
             echo
             echo '- Trigger: `${{ github.event_name }}`'
-            echo '- Offline kernel: `PASS`'
-            echo '- Live corpus: `PASS`'
-            echo '- Owner: `letsgo0226`'
+            echo '- Runtime file: `Cosmic_Energy.sh`'
+            echo '- Offline mode: `PASS`'
+            echo '- Live self-inclusive mode: `PASS`'
+            echo '- Schedule: every 5 minutes (GitHub cron)'
             echo
             echo '```json'
             cat cosmic_energy_live.json
