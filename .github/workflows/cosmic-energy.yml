@@ -20,12 +20,12 @@ concurrency:
 
 jobs:
   offline:
-    name: Offline one-line kernel
+    name: Offline exact algebraic kernel
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Verify one-line size, invariants, and Omega limit
+      - name: Verify exact roots, limits, and reversible branches
         shell: bash
         run: |
           set -euo pipefail
@@ -33,12 +33,83 @@ jobs:
           test "$(wc -c < Cosmic_Energy.sh)" -lt 2048
           sh Cosmic_Energy.sh 8 | tee offline.jsonl
           python3 - <<'PY'
-          import json
-          a=[json.loads(x) for x in open('offline.jsonl') if x.strip()]
-          assert len(a)==8
-          assert all(x.get('SPEC_OK') is True for x in a)
-          assert all(x.get('x_n',0)>1 and x.get('x_O')==1 for x in a)
-          print('PASS: finite x_n>1 with Omega unit limit x_O=1')
+          import contextlib, io, json, shlex, subprocess, sys
+          from pathlib import Path
+          from unittest.mock import patch
+          
+          A = 89875517873681764
+          C = 299792458
+          
+          def reject_float(value):
+              raise AssertionError('Floating-point JSON value: ' + value)
+          
+          def decode(text):
+              return [json.loads(line, parse_float=reject_float) for line in text.splitlines() if line.strip()]
+          
+          def verify(row, n):
+              assert type(row['n']) is int and row['n'] == n and n > 0
+              assert type(row['BIT']) is int and row['BIT'] in (0, 1)
+              root = row['x_n']
+              assert type(root) is list and len(root) == 2
+              r, d = root
+              assert type(r) is int and type(d) is int and r > 1 and d > 0
+              assert d == (n if n % 2 else n // 2)
+              assert r == (A if n % 2 else C)
+              assert n % d == 0 and r ** (n // d) == A
+              assert row['x_O'] == 1
+              assert all(row[k] is True for k in ('REV', 'RETURN', 'SPEC_OK'))
+          
+          def run(count, start=1):
+              p = subprocess.run(['sh', 'Cosmic_Energy.sh', str(count), str(start)],
+                                 check=True, capture_output=True, text=True, timeout=20)
+              rows = decode(p.stdout)
+              assert len(rows) == count
+              for n, row in enumerate(rows, start):
+                  verify(row, n)
+              assert len({row['BIT'] for row in rows}) == 1
+              return rows
+          
+          rows = decode(Path('offline.jsonl').read_text())
+          assert len(rows) == 8
+          for n, row in enumerate(rows, 1):
+              verify(row, n)
+          assert rows[0]['x_n'] == [89875517873681764, 1]
+          assert rows[1]['x_n'] == [299792458, 1]
+          assert rows[2]['x_n'] == [89875517873681764, 3]
+          assert 447933 ** 3 < A < 447934 ** 3
+          
+          # Cross the former floating-point failure and inspect huge indices directly.
+          run(3, 9085)
+          for start in (10 ** 18, 10 ** 18 + 1, 10 ** 100 + 1):
+              run(1, start)
+          for args in (['-1'], ['1', '0']):
+              p = subprocess.run(['sh', 'Cosmic_Energy.sh', *args],
+                                 capture_output=True, text=True, timeout=10)
+              assert p.returncode != 0
+          
+          # Inspect both actual bit branches and the existing reversible carrier.
+          words = shlex.split(Path('Cosmic_Energy.sh').read_text())
+          core = compile(words[words.index('-c') + 1], 'Cosmic_Energy.sh', 'exec')
+          for bit in (0, 1):
+              ns = {}
+              output = io.StringIO()
+              with patch.object(sys, 'argv', ['-c', '8', '']):
+                  with patch('secrets.randbits', return_value=bit) as draw:
+                      with contextlib.redirect_stdout(output):
+                          exec(core, ns)
+              assert draw.call_count == 1
+              branch_rows = decode(output.getvalue())
+              assert len(branch_rows) == 8
+              for n, row in enumerate(branch_rows, 1):
+                  verify(row, n)
+                  assert row['BIT'] == bit
+              assert len(ns['S']) == 2 and ns['S'][0] != ns['S'][1]
+              for state in ns['S']:
+                  assert state.split(b'\n', 1)[0] == b'OMEGA|ONTOLOGICAL_TM|FIXPOINT'
+                  assert ns['D'](ns['E'](state)) == state
+              for sample in (b'', b'\0', b'\0\0', bytes(range(256)), b'\xff' * 100):
+                  assert ns['D'](ns['E'](sample)) == sample
+          print('PASS: exact positive roots, former failure boundary, huge indices, and both bit branches')
           PY
 
   live:
@@ -67,7 +138,7 @@ jobs:
             echo '## Cosmic Energy'
             echo '- Trigger: `${{ github.event_name }}`'
             echo '- Runtime: one `Cosmic_Energy.sh`'
-            echo '- Offline: `<2048 bytes`, one physical line, `x_n>1 -> x_O=1`, PASS'
+            echo '- Offline: `<2048 bytes`, one physical line, `exact positive roots; analytic x_O=1`, PASS'
             echo '- Live: public GitHub corpus + self + workflow, PASS'
             echo '```json'
             cat live.json
